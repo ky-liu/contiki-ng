@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2018, Texas Instruments Incorporated
+ * Copyright (c) 2017-2020, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,42 +30,68 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-MIN_STACKSIZE = 0x600;  /* 1536 bytes */
-HEAPSIZE      = 0x100;  /* 256 bytes */
+MIN_STACKSIZE = 1024;
+HEAPSIZE = 0x1000; /* Size of heap buffer used by HeapMem */
+FLASH_BASE               = 0x0;
+FLASH_SIZE               = 0x58000;
+RAM_BASE                 = 0x20000000;
+RAM_SIZE                 = 0x14000;
+GPRAM_BASE               = 0x11000000;
+GPRAM_SIZE               = 0x2000;
+FLASH_SECTOR_SIZE        = 0x2000;
+IMG_HDR_SIZE             = 0x100;
+
+FLASH_BIM_CCFG_SIZE      = (FLASH_SECTOR_SIZE);
+FLASH_BIM_CCFG_BASE      = ((FLASH_BASE + FLASH_SIZE) - FLASH_BIM_CCFG_SIZE);
 
 MEMORY
 {
-    FLASH (RX)      : ORIGIN = 0x00000000, LENGTH = 0x00057fa8
-    /*
-     * Customer Configuration Area and Bootloader Backdoor configuration in
-     * flash, 40 bytes
-     */
-    FLASH_CCFG (RX) : ORIGIN = 0x00057fa8, LENGTH = 0x00000058
-    SRAM (RWX)      : ORIGIN = 0x20000000, LENGTH = 0x00014000
-    GPRAM (RWX)     : ORIGIN = 0x11000000, LENGTH = 0x00002000
+    FLASH_IMG_HDR (RX) : ORIGIN = FLASH_BASE                , LENGTH = IMG_HDR_SIZE
+    FLASH_INTVECS (RX) : ORIGIN = FLASH_BASE + IMG_HDR_SIZE , LENGTH = (FLASH_SIZE - IMG_HDR_SIZE)
+    FLASH_SYSBIOS (RX) : ORIGIN = FLASH_BASE + 0x200 , LENGTH = (FLASH_SIZE - 0x200)
+    FLASH (RX)         : ORIGIN = FLASH_BASE + 0x700 , LENGTH = (FLASH_SIZE - 0x700)
+    FLASH_BIM_CCFG (RX): ORIGIN = FLASH_BIM_CCFG_BASE , LENGTH = FLASH_BIM_CCFG_SIZE
+
+    SRAM (RWX)      : ORIGIN = RAM_BASE, LENGTH = RAM_SIZE
+    SRAM1 (RWX)     : ORIGIN = 0x20000110, LENGTH = 0x00013e90
+    GPRAM (RWX)     : ORIGIN = GPRAM_BASE, LENGTH = GPRAM_SIZE
 }
 
-REGION_ALIAS("REGION_TEXT",      FLASH);
-REGION_ALIAS("REGION_BSS",       SRAM);
-REGION_ALIAS("REGION_DATA",      SRAM);
-REGION_ALIAS("REGION_STACK",     SRAM);
-REGION_ALIAS("REGION_HEAP",      SRAM);
+/* seperate FLASH regions to avoid hard coded values for NVS/Sysbios/intvecs */
+REGION_ALIAS("REGION_IMG", FLASH_IMG_HDR);
+REGION_ALIAS("REGION_TEXTINT", FLASH_INTVECS);
+REGION_ALIAS("REGION_TEXT", FLASH_SYSBIOS);
+REGION_ALIAS("REGION_TEXTA", FLASH);
+REGION_ALIAS("REGION_VTABLE", SRAM);
+REGION_ALIAS("REGION_BSS", SRAM1);
+REGION_ALIAS("REGION_DATA", SRAM1);
+REGION_ALIAS("REGION_STACK", SRAM1);
+REGION_ALIAS("REGION_HEAP", SRAM1);
 REGION_ALIAS("REGION_ARM_EXIDX", FLASH);
 REGION_ALIAS("REGION_ARM_EXTAB", FLASH);
 
 SECTIONS {
 
-    PROVIDE (_resetVecs_base_addr = DEFINED(_resetVecs_base_addr)
-                                  ? _resetVecs_base_addr
-                                  : 0x0);
+    PROVIDE (_img_header_base_address =
+        DEFINED(_img_header_base_address) ? _img_header_base_address : 0x0);
 
-    .resetVecs (_resetVecs_base_addr) : AT (_resetVecs_base_addr) {
+    .oad_image_header (_img_header_base_address) : AT (_img_header_base_address) {
+        KEEP (*(.oad_image_header))
+    } > REGION_IMG
+
+    PROVIDE (_intvecs_base_address =
+        DEFINED(_intvecs_base_address) ? _intvecs_base_address : IMG_HDR_SIZE);
+
+    .resetVecs (_intvecs_base_address) : AT (_intvecs_base_address) {
         KEEP (*(.resetVecs))
-    } > REGION_TEXT
+    } > REGION_TEXTINT
 
-    .ramVecs (NOLOAD) : ALIGN(1024) {
-        KEEP (*(.ramVecs))
-    } > REGION_DATA
+    PROVIDE (_vtable_base_address =
+        DEFINED(_vtable_base_address) ? _vtable_base_address : 0x20000000);
+
+    .vtable (_vtable_base_address) (NOLOAD) : {
+        KEEP (*(.vtable))
+    } > REGION_VTABLE
 
     /*
      * UDMACC26XX_CONFIG_BASE below must match UDMACC26XX_CONFIG_BASE defined
@@ -78,86 +104,105 @@ SECTIONS {
     /*
      * Define absolute addresses for the DMA channels.
      * DMA channels must always be allocated at a fixed offset from the DMA base address.
-     * CTEA := Control Table Entry Address
      * --------- DO NOT MODIFY -----------
      */
-    DMA_SPI0_RX_CTEA   = (UDMACC26XX_CONFIG_BASE + 0x30);
-    DMA_SPI0_TX_CTEA   = (UDMACC26XX_CONFIG_BASE + 0x40);
-    DMA_ADC_PRI_CTEA   = (UDMACC26XX_CONFIG_BASE + 0x70);
-    DMA_GPT0A_PRI_CTEA = (UDMACC26XX_CONFIG_BASE + 0x90);
-    DMA_SPI1_RX_CTEA   = (UDMACC26XX_CONFIG_BASE + 0x100);
-    DMA_SPI1_TX_CTEA   = (UDMACC26XX_CONFIG_BASE + 0x110);
+    DMA_UART0_RX_CONTROL_TABLE_ENTRY_ADDRESS  = (UDMACC26XX_CONFIG_BASE + 0x10);
+    DMA_UART0_TX_CONTROL_TABLE_ENTRY_ADDRESS  = (UDMACC26XX_CONFIG_BASE + 0x20);
+    DMA_SPI0_RX_CONTROL_TABLE_ENTRY_ADDRESS   = (UDMACC26XX_CONFIG_BASE + 0x30);
+    DMA_SPI0_TX_CONTROL_TABLE_ENTRY_ADDRESS   = (UDMACC26XX_CONFIG_BASE + 0x40);
+    DMA_UART1_RX_CONTROL_TABLE_ENTRY_ADDRESS  = (UDMACC26XX_CONFIG_BASE + 0x50);
+    DMA_UART1_TX_CONTROL_TABLE_ENTRY_ADDRESS  = (UDMACC26XX_CONFIG_BASE + 0x60);
+    DMA_ADC_PRI_CONTROL_TABLE_ENTRY_ADDRESS   = (UDMACC26XX_CONFIG_BASE + 0x70);
+    DMA_GPT0A_PRI_CONTROL_TABLE_ENTRY_ADDRESS = (UDMACC26XX_CONFIG_BASE + 0x90);
+    DMA_SPI1_RX_CONTROL_TABLE_ENTRY_ADDRESS   = (UDMACC26XX_CONFIG_BASE + 0x100);
+    DMA_SPI1_TX_CONTROL_TABLE_ENTRY_ADDRESS   = (UDMACC26XX_CONFIG_BASE + 0x110);
 
-    DMA_SPI0_RX_ALT_CTEA = (UDMACC26XX_CONFIG_BASE + 0x230);
-    DMA_SPI0_TX_ALT_CTEA = (UDMACC26XX_CONFIG_BASE + 0x240);
-    DMA_ADC_ALT_CTEA     = (UDMACC26XX_CONFIG_BASE + 0x270);
-    DMA_GPT0A_ALT_CTEA   = (UDMACC26XX_CONFIG_BASE + 0x290);
-    DMA_SPI1_RX_ALT_CTEA = (UDMACC26XX_CONFIG_BASE + 0x300);
-    DMA_SPI1_TX_ALT_CTEA = (UDMACC26XX_CONFIG_BASE + 0x310);
+    DMA_UART0_RX_ALT_CONTROL_TABLE_ENTRY_ADDRESS = (UDMACC26XX_CONFIG_BASE + 0x210);
+    DMA_UART0_TX_ALT_CONTROL_TABLE_ENTRY_ADDRESS = (UDMACC26XX_CONFIG_BASE + 0x220);
+    DMA_SPI0_RX_ALT_CONTROL_TABLE_ENTRY_ADDRESS = (UDMACC26XX_CONFIG_BASE + 0x230);
+    DMA_SPI0_TX_ALT_CONTROL_TABLE_ENTRY_ADDRESS = (UDMACC26XX_CONFIG_BASE + 0x240);
+    DMA_UART1_RX_ALT_CONTROL_TABLE_ENTRY_ADDRESS = (UDMACC26XX_CONFIG_BASE + 0x250);
+    DMA_UART1_TX_ALT_CONTROL_TABLE_ENTRY_ADDRESS = (UDMACC26XX_CONFIG_BASE + 0x260);
+    DMA_ADC_ALT_CONTROL_TABLE_ENTRY_ADDRESS     = (UDMACC26XX_CONFIG_BASE + 0x270);
+    DMA_GPT0A_ALT_CONTROL_TABLE_ENTRY_ADDRESS   = (UDMACC26XX_CONFIG_BASE + 0x290);
+    DMA_SPI1_RX_ALT_CONTROL_TABLE_ENTRY_ADDRESS = (UDMACC26XX_CONFIG_BASE + 0x300);
+    DMA_SPI1_TX_ALT_CONTROL_TABLE_ENTRY_ADDRESS = (UDMACC26XX_CONFIG_BASE + 0x310);
 
     /*
-     * Allocate SPI0, SPI1, ADC, and GPTimer0 DMA descriptors at absolute addresses.
+     * Allocate UART0, UART1, SPI0, SPI1, ADC, and GPTimer0 DMA descriptors at absolute addresses.
      * --------- DO NOT MODIFY -----------
      */
+    UDMACC26XX_uart0RxControlTableEntry_is_placed = 0;
+    .dmaUart0RxControlTableEntry DMA_UART0_RX_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_UART0_RX_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaUart0RxControlTableEntry)} > REGION_DATA
+
+    UDMACC26XX_uart0TxControlTableEntry_is_placed = 0;
+    .dmaUart0TxControlTableEntry DMA_UART0_TX_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_UART0_TX_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaUart0TxControlTableEntry)} > REGION_DATA
+
     UDMACC26XX_dmaSpi0RxControlTableEntry_is_placed = 0;
-    .dmaSpi0RxControlTableEntry DMA_SPI0_RX_CTEA (NOLOAD) : AT (DMA_SPI0_RX_CTEA) {
-        *(.dmaSpi0RxControlTableEntry)
-    } > REGION_DATA
+    .dmaSpi0RxControlTableEntry DMA_SPI0_RX_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_SPI0_RX_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaSpi0RxControlTableEntry)} > REGION_DATA
 
     UDMACC26XX_dmaSpi0TxControlTableEntry_is_placed = 0;
-    .dmaSpi0TxControlTableEntry DMA_SPI0_TX_CTEA (NOLOAD) : AT (DMA_SPI0_TX_CTEA) {
-        *(.dmaSpi0TxControlTableEntry)
-    } > REGION_DATA
+    .dmaSpi0TxControlTableEntry DMA_SPI0_TX_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_SPI0_TX_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaSpi0TxControlTableEntry)} > REGION_DATA
+
+    UDMACC26XX_uart1RxControlTableEntry_is_placed = 0;
+    .dmaUart1RxControlTableEntry DMA_UART1_RX_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_UART1_RX_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaUart1RxControlTableEntry)} > REGION_DATA
+
+    UDMACC26XX_uart1TxControlTableEntry_is_placed = 0;
+    .dmaUart1TxControlTableEntry DMA_UART1_TX_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_UART1_TX_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaUart1TxControlTableEntry)} > REGION_DATA
 
     UDMACC26XX_dmaADCPriControlTableEntry_is_placed = 0;
-    .dmaADCPriControlTableEntry DMA_ADC_PRI_CTEA (NOLOAD) : AT (DMA_ADC_PRI_CTEA) {
-        *(.dmaADCPriControlTableEntry)
-    } > REGION_DATA
+    .dmaADCPriControlTableEntry DMA_ADC_PRI_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_ADC_PRI_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaADCPriControlTableEntry)} > REGION_DATA
 
     UDMACC26XX_dmaGPT0APriControlTableEntry_is_placed = 0;
-    .dmaGPT0APriControlTableEntry DMA_GPT0A_PRI_CTEA (NOLOAD) : AT (DMA_GPT0A_PRI_CTEA) {
-        *(.dmaGPT0APriControlTableEntry)
-    } > REGION_DATA
+    .dmaGPT0APriControlTableEntry DMA_GPT0A_PRI_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_GPT0A_PRI_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaGPT0APriControlTableEntry)} > REGION_DATA
 
     UDMACC26XX_dmaSpi1RxControlTableEntry_is_placed = 0;
-    .dmaSpi1RxControlTableEntry DMA_SPI1_RX_CTEA (NOLOAD) : AT (DMA_SPI1_RX_CTEA) {
-        *(.dmaSpi1RxControlTableEntry)
-    } > REGION_DATA
+    .dmaSpi1RxControlTableEntry DMA_SPI1_RX_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_SPI1_RX_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaSpi1RxControlTableEntry)} > REGION_DATA
 
     UDMACC26XX_dmaSpi1TxControlTableEntry_is_placed = 0;
-    .dmaSpi1TxControlTableEntry DMA_SPI1_TX_CTEA (NOLOAD) : AT (DMA_SPI1_TX_CTEA) {
-        *(.dmaSpi1TxControlTableEntry)
-    } > REGION_DATA
+    .dmaSpi1TxControlTableEntry DMA_SPI1_TX_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_SPI1_TX_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaSpi1TxControlTableEntry)} > REGION_DATA
+
+    UDMACC26XX_uart0RxAltControlTableEntry_is_placed = 0;
+    .dmaUart0RxAltControlTableEntry DMA_UART0_RX_ALT_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_UART0_RX_ALT_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaUart0RxAltControlTableEntry)} > REGION_DATA
+
+    UDMACC26XX_uart0TxAltControlTableEntry_is_placed = 0;
+    .dmaUart0TxAltControlTableEntry DMA_UART0_TX_ALT_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_UART0_TX_ALT_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaUart0TxAltControlTableEntry)} > REGION_DATA
 
     UDMACC26XX_dmaSpi0RxAltControlTableEntry_is_placed = 0;
-    .dmaSpi0RxAltControlTableEntry DMA_SPI0_RX_ALT_CTEA (NOLOAD) : AT (DMA_SPI0_RX_ALT_CTEA) {
-        *(.dmaSpi0RxAltControlTableEntry)
-    } > REGION_DATA
+    .dmaSpi0RxAltControlTableEntry DMA_SPI0_RX_ALT_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_SPI0_RX_ALT_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaSpi0RxAltControlTableEntry)} > REGION_DATA
 
     UDMACC26XX_dmaSpi0TxAltControlTableEntry_is_placed = 0;
-    .dmaSpi0TxAltControlTableEntry DMA_SPI0_TX_ALT_CTEA (NOLOAD) : AT (DMA_SPI0_TX_ALT_CTEA) {
-        *(.dmaSpi0TxAltControlTableEntry)
-    } > REGION_DATA
+    .dmaSpi0TxAltControlTableEntry DMA_SPI0_TX_ALT_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_SPI0_TX_ALT_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaSpi0TxAltControlTableEntry)} > REGION_DATA
+
+    UDMACC26XX_uart1RxAltControlTableEntry_is_placed = 0;
+    .dmaUart1RxAltControlTableEntry DMA_UART1_RX_ALT_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_UART1_RX_ALT_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaUart1RxAltControlTableEntry)} > REGION_DATA
+
+    UDMACC26XX_uart1TxAltControlTableEntry_is_placed = 0;
+    .dmaUart1TxAltControlTableEntry DMA_UART1_TX_ALT_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_UART1_TX_ALT_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaUart1TxAltControlTableEntry)} > REGION_DATA
 
     UDMACC26XX_dmaADCAltControlTableEntry_is_placed = 0;
-    .dmaADCAltControlTableEntry DMA_ADC_ALT_CTEA (NOLOAD) : AT (DMA_ADC_ALT_CTEA) {
-        *(.dmaADCAltControlTableEntry)
-    } > REGION_DATA
+    .dmaADCAltControlTableEntry DMA_ADC_ALT_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_ADC_ALT_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaADCAltControlTableEntry)} > REGION_DATA
 
     UDMACC26XX_dmaGPT0AAltControlTableEntry_is_placed = 0;
-    .dmaGPT0AAltControlTableEntry DMA_GPT0A_ALT_CTEA (NOLOAD) : AT (DMA_GPT0A_ALT_CTEA) {
-        *(.dmaGPT0AAltControlTableEntry)
-    } > REGION_DATA
+    .dmaGPT0AAltControlTableEntry DMA_GPT0A_ALT_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_GPT0A_ALT_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaGPT0AAltControlTableEntry)} > REGION_DATA
 
     UDMACC26XX_dmaSpi1RxAltControlTableEntry_is_placed = 0;
-    .dmaSpi1RxAltControlTableEntry DMA_SPI1_RX_ALT_CTEA (NOLOAD) : AT (DMA_SPI1_RX_ALT_CTEA) {
-        *(.dmaSpi1RxAltControlTableEntry)
-    } > REGION_DATA
+    .dmaSpi1RxAltControlTableEntry DMA_SPI1_RX_ALT_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_SPI1_RX_ALT_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaSpi1RxAltControlTableEntry)} > REGION_DATA
 
     UDMACC26XX_dmaSpi1TxAltControlTableEntry_is_placed = 0;
-    .dmaSpi1TxAltControlTableEntry DMA_SPI1_TX_ALT_CTEA (NOLOAD) : AT (DMA_SPI1_TX_ALT_CTEA) {
-        *(.dmaSpi1TxAltControlTableEntry)
-    } > REGION_DATA
+    .dmaSpi1TxAltControlTableEntry DMA_SPI1_TX_ALT_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_SPI1_TX_ALT_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaSpi1TxAltControlTableEntry)} > REGION_DATA
+
+
+
+    /* if a ROM-only symbol is present, then ROM is being used.
+     * Reserve memory for surgically placed config constants.
+     */
+    _rom_rodata_start = 0x2000;
+    _rom_rodata_size = DEFINED(ROM_RODATA_SIZE) ? 0 : DEFINED(ROM_RODATA_SIZE_NO_OAD) ? 0x330 : 0;
+
+    .rom_rodata_reserve (_rom_rodata_start): {
+        . += _rom_rodata_size;
+    } > REGION_TEXT AT> REGION_TEXT
 
     .text : {
         CREATE_OBJECT_SYMBOLS
@@ -173,7 +218,10 @@ SECTIONS {
         __init_array_end = .;
         *(.init)
         *(.fini*)
-    } > REGION_TEXT AT> REGION_TEXT
+        *(.const*)
+        *(.rodata)
+        *(.rodata.*)
+    } > REGION_TEXTA AT> REGION_TEXTA
 
     PROVIDE (__etext = .);
     PROVIDE (_etext = .);
@@ -182,16 +230,17 @@ SECTIONS {
     .rodata : {
         *(.rodata)
         *(.rodata.*)
-    } > REGION_TEXT AT> REGION_TEXT
+        *(.rodata_*)
+    } > REGION_TEXTA AT> REGION_TEXTA
 
-    .data : ALIGN(0x4) {
-        __data_load__ = LOADADDR(.data);
+    .data : ALIGN(4) {
+        __data_load__ = LOADADDR (.data);
         __data_start__ = .;
         *(.data)
         *(.data.*)
-        . = ALIGN (0x4);
+        . = ALIGN (4);
         __data_end__ = .;
-    } > REGION_DATA AT> REGION_TEXT
+    } > REGION_DATA AT> REGION_TEXTA
 
     .ARM.exidx : {
         __exidx_start = .;
@@ -203,13 +252,17 @@ SECTIONS {
         *(.ARM.extab* .gnu.linkonce.armextab.*)
     } > REGION_ARM_EXTAB AT> REGION_ARM_EXTAB
 
+    .flash_end_address : {
+        KEEP (*(.flash_end_address))
+    } > REGION_TEXTA AT> REGION_TEXTA
+
     .nvs (NOLOAD) : ALIGN(0x2000) {
         *(.nvs)
-    } > REGION_TEXT
+    } > REGION_TEXTA
 
-    .ccfg : {
-        KEEP(*(.ccfg))
-    } > FLASH_CCFG AT> FLASH_CCFG
+    .bim_oad_debug_image_bin : {
+        KEEP (*(.bim_oad_debug_image_bin))
+    } > FLASH_BIM_CCFG AT> FLASH_BIM_CCFG
 
     .bss : {
         __bss_start__ = .;
@@ -217,29 +270,30 @@ SECTIONS {
         *(.bss)
         *(.bss.*)
         *(COMMON)
-        . = ALIGN(0x4);
+        . = ALIGN (4);
         __bss_end__ = .;
     } > REGION_BSS AT> REGION_BSS
 
-    /* Start of heap must be 4 byte aligned */
-    .heap (NOLOAD) : ALIGN(0x4) {
-        PROVIDE(__heap_start__ = .);
-        PROVIDE(_heap          = __heap_start__);
-        PROVIDE(end            = __heap_start__);
-        PROVIDE(_end           = __heap_start__);
-        PROVIDE(__end          = __heap_start__);
-
-        . += HEAPSIZE;
+    .heap : {
+        __heap_start__ = .;
+        end = __heap_start__;
+        _end = end;
+        __end = end;
         KEEP(*(.heap))
+        __heap_end__ = .;
+        __HeapLimit = __heap_end__;
+    } > REGION_HEAP AT> REGION_HEAP
 
-        PROVIDE(__heap_end__ = .);
-        PROVIDE(_eheap       = __heap_end__);
-        PROVIDE(__HeapLimit  = __heap_end__);
+    /* Heap buffer used by HeapMem */
+    .priheap : {
+        . = ALIGN (8);
+        __primary_heap_start__ = .;
+        . += HEAPSIZE;
+        __primary_heap_end__ = .;
     } > REGION_HEAP AT> REGION_HEAP
 
     PROVIDE(__stack_size = ORIGIN(SRAM) + LENGTH(SRAM) - ALIGN(0x8));
 
-    /* Start of stack must be 8 byte aligned */
     .stack (NOLOAD) : {
         PROVIDE(_stack        = ALIGN(0x8));
         PROVIDE(__stack       = _stack);

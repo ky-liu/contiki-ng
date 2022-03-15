@@ -71,7 +71,7 @@ extern unsigned long _stack_end;
  * ensure that it ends up at physical address 0x0000.0000.
  */
 __attribute__((section(".resetVecs"))) __attribute__((used))
-static void(*const resetVectors[16])(void) =
+void(*const resetVectors[16])(void) =
 {
   (void(*)(void))((uint32_t)&_stack_end),
   /* The initial stack pointer */

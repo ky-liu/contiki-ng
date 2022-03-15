@@ -33,7 +33,7 @@
 MIN_STACKSIZE = 1024;
 HEAPSIZE = 0x1000; /* Size of heap buffer used by HeapMem */
 FLASH_BASE               = 0x0;
-FLASH_SIZE               = 0x58000;
+FLASH_SIZE               = 0x56000;
 RAM_BASE                 = 0x20000000;
 RAM_SIZE                 = 0x14000;
 GPRAM_BASE               = 0x11000000;
@@ -41,16 +41,12 @@ GPRAM_SIZE               = 0x2000;
 FLASH_SECTOR_SIZE        = 0x2000;
 IMG_HDR_SIZE             = 0x100;
 
-FLASH_BIM_CCFG_SIZE      = (FLASH_SECTOR_SIZE);
-FLASH_BIM_CCFG_BASE      = ((FLASH_BASE + FLASH_SIZE) - FLASH_BIM_CCFG_SIZE);
-
 MEMORY
 {
     FLASH_IMG_HDR (RX) : ORIGIN = FLASH_BASE                , LENGTH = IMG_HDR_SIZE
     FLASH_INTVECS (RX) : ORIGIN = FLASH_BASE + IMG_HDR_SIZE , LENGTH = (FLASH_SIZE - IMG_HDR_SIZE)
     FLASH_SYSBIOS (RX) : ORIGIN = FLASH_BASE + 0x200 , LENGTH = (FLASH_SIZE - 0x200)
     FLASH (RX)         : ORIGIN = FLASH_BASE + 0x700 , LENGTH = (FLASH_SIZE - 0x700)
-    FLASH_BIM_CCFG (RX): ORIGIN = FLASH_BIM_CCFG_BASE , LENGTH = FLASH_BIM_CCFG_SIZE
 
     SRAM (RWX)      : ORIGIN = RAM_BASE, LENGTH = RAM_SIZE
     SRAM1 (RWX)     : ORIGIN = 0x20000110, LENGTH = 0x00013e90
@@ -259,10 +255,6 @@ SECTIONS {
     .nvs (NOLOAD) : ALIGN(0x2000) {
         *(.nvs)
     } > REGION_TEXTA
-
-    .bim_oad_debug_image_bin : {
-        KEEP (*(.bim_oad_debug_image_bin))
-    } > FLASH_BIM_CCFG AT> FLASH_BIM_CCFG
 
     .bss : {
         __bss_start__ = .;

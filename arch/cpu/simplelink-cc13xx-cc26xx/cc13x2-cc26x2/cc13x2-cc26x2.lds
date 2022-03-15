@@ -40,13 +40,13 @@ GPRAM_BASE               = 0x11000000;
 GPRAM_SIZE               = 0x2000;
 FLASH_SECTOR_SIZE        = 0x2000;
 IMG_HDR_SIZE             = 0x100;
+VEC_TABLE_SIZE           = 0x100;
 
 MEMORY
 {
     FLASH_IMG_HDR (RX) : ORIGIN = FLASH_BASE                , LENGTH = IMG_HDR_SIZE
-    FLASH_INTVECS (RX) : ORIGIN = FLASH_BASE + IMG_HDR_SIZE , LENGTH = (FLASH_SIZE - IMG_HDR_SIZE)
-    FLASH_SYSBIOS (RX) : ORIGIN = FLASH_BASE + 0x200 , LENGTH = (FLASH_SIZE - 0x200)
-    FLASH (RX)         : ORIGIN = FLASH_BASE + 0x700 , LENGTH = (FLASH_SIZE - 0x700)
+    FLASH_INTVECS (RX) : ORIGIN = FLASH_BASE + IMG_HDR_SIZE , LENGTH = VEC_TABLE_SIZE
+    FLASH (RX)         : ORIGIN = FLASH_BASE + IMG_HDR_SIZE + VEC_TABLE_SIZE, LENGTH = (FLASH_SIZE - IMG_HDR_SIZE - IMG_HDR_SIZE)
 
     SRAM (RWX)      : ORIGIN = RAM_BASE, LENGTH = RAM_SIZE
     SRAM1 (RWX)     : ORIGIN = 0x20000110, LENGTH = 0x00013e90
@@ -56,7 +56,6 @@ MEMORY
 /* seperate FLASH regions to avoid hard coded values for NVS/Sysbios/intvecs */
 REGION_ALIAS("REGION_IMG", FLASH_IMG_HDR);
 REGION_ALIAS("REGION_TEXTINT", FLASH_INTVECS);
-REGION_ALIAS("REGION_TEXT", FLASH_SYSBIOS);
 REGION_ALIAS("REGION_TEXTA", FLASH);
 REGION_ALIAS("REGION_VTABLE", SRAM);
 REGION_ALIAS("REGION_BSS", SRAM1);
@@ -187,18 +186,6 @@ SECTIONS {
 
     UDMACC26XX_dmaSpi1TxAltControlTableEntry_is_placed = 0;
     .dmaSpi1TxAltControlTableEntry DMA_SPI1_TX_ALT_CONTROL_TABLE_ENTRY_ADDRESS (NOLOAD) : AT (DMA_SPI1_TX_ALT_CONTROL_TABLE_ENTRY_ADDRESS) {*(.dmaSpi1TxAltControlTableEntry)} > REGION_DATA
-
-
-
-    /* if a ROM-only symbol is present, then ROM is being used.
-     * Reserve memory for surgically placed config constants.
-     */
-    _rom_rodata_start = 0x2000;
-    _rom_rodata_size = DEFINED(ROM_RODATA_SIZE) ? 0 : DEFINED(ROM_RODATA_SIZE_NO_OAD) ? 0x330 : 0;
-
-    .rom_rodata_reserve (_rom_rodata_start): {
-        . += _rom_rodata_size;
-    } > REGION_TEXT AT> REGION_TEXT
 
     .text : {
         CREATE_OBJECT_SYMBOLS

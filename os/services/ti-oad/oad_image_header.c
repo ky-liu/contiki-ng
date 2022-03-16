@@ -51,7 +51,7 @@
 #include "oad_image_header.h"
 
 
-#define MY_APP_SOFTWARE_VER   { '0', '0', '0', '1' }
+#define MY_APP_SOFTWARE_VER   { '1', '0', '0', '1' }
 
 /*******************************************************************************
  * LOCAL VARIABLES
@@ -104,7 +104,7 @@ __root const struct img_header_single_app  oad_image_header @ ".oad_image_header
     .h.metaVer          = 0x01,
 
     /* type of application */
-    .h.techType         = OAD_WIRELESS_TECH_TIMAC_SUBG,
+    .h.techType         = OAD_WIRELESS_TECH_BLE,
 
     /* image copy status */
     .h.imgCpStat        = DEFAULT_STATE,
@@ -113,7 +113,7 @@ __root const struct img_header_single_app  oad_image_header @ ".oad_image_header
     .h.crcStat          = DEFAULT_STATE,
 
     /* What is this for? What #define should this use */
-    .h.imgType          =  OAD_IMG_TYPE_APP,
+    .h.imgType          =  OAD_IMG_TYPE_APP_STACK,
 
     /* What is this for? */
     .h.imgNo            = 0x0,
@@ -140,7 +140,7 @@ __root const struct img_header_single_app  oad_image_header @ ".oad_image_header
     .h.rfu              = 0xFFFF,   //!< reserved bytes */
 #if (defined(SECURITY))
     .s.segTypeSecure    = IMG_SECURITY_SEG_ID,
-    .s.wirelessTech     = OAD_WIRELESS_TECH_TIMAC_SUBG,
+    .s.wirelessTech     = OAD_WIRELESS_TECH_BLE,
     .s.verifStat        = DEFAULT_STATE,
     .s.secSegLen        = 0x55,
     .s.secVer           = SECURITY_VER,                     /* Image payload and length */
@@ -150,7 +150,7 @@ __root const struct img_header_single_app  oad_image_header @ ".oad_image_header
     /* our payload segment */
     .p.segType          = IMG_PAYLOAD_SEG_ID,
 
-    .p.wirelessTech     = OAD_WIRELESS_TECH_TIMAC_SUBG,
+    .p.wirelessTech     = OAD_WIRELESS_TECH_BLE,
     .p.rfu              = 0,
     .p.imgSegLen        = 0, /* filled in by the python script */
     .p.startAddr        = (uint32_t)(&oad_image_header) /* this should be at address 0 */
